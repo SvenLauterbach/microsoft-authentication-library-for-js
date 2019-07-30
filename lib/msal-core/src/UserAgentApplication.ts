@@ -407,15 +407,26 @@ export class UserAgentApplication {
         reject);
       return;
     }
-
     // if extraScopesToConsent is passed in loginCall, append them to the login request
     const scopes: Array<string> = isLoginCall ? this.appendScopes(request) : request.scopes;
+
+    // Get the account object if a session exists
+    const account: Account = (request && request.account && !isLoginCall) ? request.account : this.getAccount();
 
     // Validate and filter scopes (the validate function will throw if validation fails)
     this.validateInputScope(scopes, !isLoginCall);
 
-    // Get the account object if a session exists
-    const account: Account = (request && request.account && !isLoginCall) ? request.account : this.getAccount();
+    const acquireTokenAuthority = (!isLoginCall && request && request.authority) ? AuthorityFactory.CreateInstance(request.authority, this.config.auth.validateAuthority) : this.authorityInstance;
+    const responseType: string = isLoginCall ? ResponseTypes.id_token : this.getTokenType(account, scopes, false);
+    let serverAuthenticationRequest: ServerRequestParameters;
+    serverAuthenticationRequest = new ServerRequestParameters(
+      acquireTokenAuthority,
+      this.clientId,
+      scopes,
+      responseType,
+      this.getRedirectUri(),
+      request && request.state
+    );
 
     // If no session exists, prompt the user to login.
     if (!account && !ServerRequestParameters.isSSOParam(request)) {
@@ -476,9 +487,6 @@ export class UserAgentApplication {
 
     const scope = scopes ? scopes.join(" ").toLowerCase() : this.clientId.toLowerCase();
 
-    let serverAuthenticationRequest: ServerRequestParameters;
-    const acquireTokenAuthority = (!isLoginCall && request && request.authority) ? AuthorityFactory.CreateInstance(request.authority, this.config.auth.validateAuthority) : this.authorityInstance;
-
     let popUpWindow: Window;
     if (interactionType === Constants.interactionTypePopup) {
       // Generate a popup window
@@ -491,7 +499,6 @@ export class UserAgentApplication {
 
     acquireTokenAuthority.resolveEndpointsAsync().then(() => {
       // On Fulfillment
-      const responseType: string = isLoginCall ? ResponseTypes.id_token : this.getTokenType(account, scopes, false);
       let loginStartPage: string;
 
       if (isLoginCall) {
@@ -503,15 +510,6 @@ export class UserAgentApplication {
           this.cacheStorage.setItem(Constants.angularLoginRequest, "");
         }
       }
-
-      serverAuthenticationRequest = new ServerRequestParameters(
-        acquireTokenAuthority,
-        this.clientId,
-        scopes,
-        responseType,
-        this.getRedirectUri(),
-        request && request.state
-      );
 
       this.updateCacheEntries(serverAuthenticationRequest, account, loginStartPage);
 
@@ -1849,87 +1847,6 @@ export class UserAgentApplication {
     }
 
     return uniqueAccounts;
-  }
-
-  //#endregion
-
-  //#region Scopes (Extract to Scopes.ts)
-
-  // Note: "this" dependency in this section is minimal.
-  // If pCacheStorage is separated from the class object, or passed as a fn param, scopesUtils.ts can be created
-
-  /**
-   * @hidden
-   *
-   * Used to validate the scopes input parameter requested  by the developer.
-   * @param {Array<string>} scopes - Developer requested permissions. Not all scopes are guaranteed to be included in the access token returned.
-   * @param {boolean} scopesRequired - Boolean indicating whether the scopes array is required or not
-   * @ignore
-   */
-  private validateInputScope(scopes: Array<string>, scopesRequired: boolean): void {
-    if (!scopes) {
-      if (scopesRequired) {
-        throw ClientConfigurationError.createScopesRequiredError(scopes);
-      } else {
-        return;
-      }
-    }
-
-    // Check that scopes is an array object (also throws error if scopes == null)
-    if (!Array.isArray(scopes)) {
-      throw ClientConfigurationError.createScopesNonArrayError(scopes);
-    }
-
-    // Check that scopes is not an empty array
-    if (scopes.length < 1) {
-      throw ClientConfigurationError.createEmptyScopesArrayError(scopes.toString());
-    }
-
-    // Check that clientId is passed as single scope
-    if (scopes.indexOf(this.clientId) > -1) {
-      if (scopes.length > 1) {
-        throw ClientConfigurationError.createClientIdSingleScopeError(scopes.toString());
-      }
-    }
-  }
-
-  /**
-   * @hidden
-   *
-   * Extracts scope value from the state sent with the authentication request.
-   * @param {string} state
-   * @returns {string} scope.
-   * @ignore
-   */
-  private getScopeFromState(state: string): string {
-    if (state) {
-      const splitIndex = state.indexOf("|");
-      if (splitIndex > -1 && splitIndex + 1 < state.length) {
-        return state.substring(splitIndex + 1);
-      }
-    }
-    return "";
-  }
-
-  /**
-   * @ignore
-   * Appends extraScopesToConsent if passed
-   * @param {@link AuthenticationParameters}
-   */
-  private appendScopes(request: AuthenticationParameters): Array<string> {
-
-    let scopes: Array<string>;
-
-    if (request && request.scopes) {
-        if (request.extraScopesToConsent) {
-            scopes = [...request.scopes, ...request.extraScopesToConsent];
-        }
-        else {
-        scopes = request.scopes;
-        }
-    }
-
-    return scopes;
   }
 
   //#endregion

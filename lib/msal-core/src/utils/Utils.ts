@@ -148,7 +148,7 @@ export class Utils {
 
   //#endregion
 
-  //#region String Ops
+  //#region Basic Ops
 
   /**
    * Check if a string is empty
@@ -157,6 +157,15 @@ export class Utils {
    */
   static isEmpty(str: string): boolean {
     return (typeof str === "undefined" || !str || 0 === str.length);
+  }
+
+  /**
+   * Converts string array entries to lowercase.
+   *
+   * @param arr
+   */
+  static convertArrayEntriesToLowerCase(arr: Array<string>): Array<string> {
+    return arr.map(arr => arr.toLowerCase());
   }
 
   //#endregion
